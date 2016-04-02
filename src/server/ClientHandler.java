@@ -6,7 +6,7 @@ import java.io.InputStreamReader;
 import java.net.Socket;
 
 public class ClientHandler extends Thread {
-	BufferedReader in;
+	BufferedReader socketInput;
 	private Socket socket;
 
 	// Constructor
@@ -17,10 +17,12 @@ public class ClientHandler extends Thread {
 	public void run() {
 		try {
 
-			in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+			socketInput = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 
         	while(true) {
-        		String rawInput = in.readLine();
+        		String rawInput = socketInput.readLine();
+        		
+        		//ReplicaServer.getData(0);
         		
                 if (rawInput == null) {
                     return;
