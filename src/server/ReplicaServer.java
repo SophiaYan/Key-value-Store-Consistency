@@ -34,6 +34,9 @@ public class ReplicaServer {
 	public ReplicaServer(int port, String config) throws IOException {
 		listener = new ServerSocket(port);
 		this.config = config;
+		processPort = port;
+		ipMap = new HashMap<Integer, String>();
+		portMap = new HashMap<Integer, Integer>(); 
 		//connect with all the other servers
 	}
 	
@@ -166,7 +169,7 @@ public class ReplicaServer {
         	System.exit(0);
 		}	
     	
-    	ReplicaServer rs = new ReplicaServer(Integer.parseInt(args[0]), "/Applications/eclipse-epsilon-1.2-macosx-cocoa-x86_64/CS425MP2/Key-value-Store-Consistency");
+    	ReplicaServer rs = new ReplicaServer(Integer.parseInt(args[0]), "config");
     	rs.run();
     	
     }

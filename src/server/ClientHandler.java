@@ -3,10 +3,12 @@ package server;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.net.Socket;
 
 public class ClientHandler extends Thread {
 	BufferedReader socketInput;
+	private PrintWriter socketOutput;
 	private Socket socket;
 
 	// Constructor
@@ -18,7 +20,8 @@ public class ClientHandler extends Thread {
 		try {
 
 			socketInput = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-
+			socketOutput = new PrintWriter(socket.getOutputStream(), true);
+			
         	while(true) {
         		String rawInput = socketInput.readLine();
         		
@@ -28,8 +31,8 @@ public class ClientHandler extends Thread {
                     return;
                 }
                 
-                System.out.println(rawInput);
-                                
+//                System.out.println(rawInput);
+                socketOutput.println(rawInput);                
         	}
              
 		} catch (IOException e) {

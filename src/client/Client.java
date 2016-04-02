@@ -11,14 +11,15 @@ import java.util.concurrent.TimeUnit;
 
 public class Client {
 	
-	private BufferedReader socketInput;
+	public BufferedReader socketInput;
 	private PrintWriter socketOutput;
 	private Socket socket;
-	private int consistency;  // indicate the consistency model
+	private int consistency;  // indicate the consistency model, 1 for eventual, 2 for linearizability
 	private int writeNum;
 	private int readNum;
 	private int serverId;
-	private boolean isFinished;  // indicate whether each operation has finished or not, true for has finished, false for not
+	private String latestReq;
+	private listenerThread listener;
 	
     private HashMap<Integer, String> ipMap;
     private HashMap<Integer, Integer> portMap; 
@@ -27,35 +28,25 @@ public class Client {
      *  client constructor
      */
     public Client(int serverId) throws IOException {
+    	
     	ipMap = new HashMap<Integer, String>();
     	portMap = new HashMap<Integer, Integer>();
-    	readConfig("/Applications/eclipse-epsilon-1.2-macosx-cocoa-x86_64/CS425MP2/Key-value-Store-Consistency");
+    	readConfig("config");
     	
-    	//this.serverId = serverId;
 		boolean isSucceed; 
 		do {
 			isSucceed = makeConnection(serverId);
+			if (isSucceed){
+				this.serverId = serverId;
+			}
 			serverId = (serverId + 1) % 9;
 		} while (!isSucceed);
-    	
-		this.serverId = serverId - 1;
+    		
 		consistency = 0;
 		writeNum = 0;
 		readNum = 0;
-		isFinished = true;
 		
 	}
-    
-    private boolean makeConnection(int serverId) {
-    	try {
-    		socket = new Socket(ipMap.get(serverId), portMap.get(serverId));
-    		socketInput = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-    		socketOutput = new PrintWriter(socket.getOutputStream(), true);
-    		return true;
-    	} catch (Exception e){
-    		return false;
-    	}
-    }
     
     /**
      * This is a helper function to read the config file and store corresponding info properly
@@ -65,10 +56,9 @@ public class Client {
     	// Read and store process info from config file
     	try (BufferedReader configReader = new BufferedReader(new FileReader(config))) {
 
-    		String currLine = configReader.readLine();		
-    		
+    		String currLine = configReader.readLine();
+    		currLine = null;
     		while ((currLine = configReader.readLine()) != null) {
-    			
 					String[] processInfo = currLine.split(" ", 3);
 					int id = Integer.parseInt(processInfo[0]);
 					String ip = processInfo[1];
@@ -82,42 +72,67 @@ public class Client {
 			e.printStackTrace();
 		}
     }
-	
+    
+    private boolean makeConnection(int serverId) {
+    	try {
+    		
+    		socket = new Socket(ipMap.get(serverId), portMap.get(serverId));
+    		socketInput = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+    		socketOutput = new PrintWriter(socket.getOutputStream(), true);
+    		
+    		try {
+    			listener = new listenerThread();
+    			listener.start();
+    		} catch (Exception e){
+    			return false;
+    		}
+    		return true;
+    		
+    	} catch (Exception e){
+    		return false;
+    	}
+    }
+    
+
 
     private void run() throws IOException, InterruptedException {    
     	try (
     			BufferedReader stdIn = new BufferedReader(new InputStreamReader(System.in));
     		) 
     	{
-    		String userInput = stdIn.readLine();
     		
-        	while ((userInput != null) && (consistency != 0)){
-        		System.out.println("Choose consistency model. \n"
-						+  "Type 1 for eventual consistency model. Type 2 for linearizability.\n");
-        		int proposedCons = Integer.parseInt(userInput);
-        		if ((proposedCons == 0) || (proposedCons == 1)){
+    		String userInput = null;
+    		System.out.println("Choose consistency model. \n"
+					+  "Type 1 for eventual consistency model. Type 2 for linearizability.\n");
+        	
+    		while (((consistency == 0)  && (userInput = stdIn.readLine()) != null) ){
+        		int proposedCons = Integer.parseInt(userInput.substring(0,1));
+        		if ((proposedCons == 1) || (proposedCons == 2)){
         			consistency = proposedCons;
         			socketOutput.println("consistency" + consistency);
         		}
         	}
         	
-        	while ((userInput != null) && (consistency != 0)){
-        		System.out.println("Input W and R with space in between.\n");
-        		int proposeWrite = Integer.parseInt(userInput.substring(0,1));
-        		int proposeRead = Integer.parseInt(userInput.substring(2,3));
+    		System.out.println(" Input W number and R number with space in between.\n");
+;        	while ((userInput = stdIn.readLine()) != null){	
+        		String [] tokens = userInput.split(" ");
+        		int proposeWrite = Integer.parseInt(tokens[0]);
+        		int proposeRead = Integer.parseInt(tokens[1]);
         				
-        		if ((proposeWrite > 0) && (proposeWrite < 9) && (proposeRead > 0) && (proposeRead < 9)){
+        		if ((proposeWrite > 0) && (proposeWrite < 10) && (proposeRead > 0) && (proposeRead < 10)){
         			writeNum = proposeWrite;
         			readNum = proposeRead;
         			socketOutput.println("writeNum" + writeNum);
         			socketOutput.println("readNum" + readNum);
+        			break;
         		}
         	}
         	
+			System.out.println("Please input request. \n");
         	while ((userInput = stdIn.readLine()) != null) {
-        		if (userInput.indexOf("get") == 0 && userInput.length() == 5){
+        		if (userInput.indexOf("get") == 0){
         			sendRequest(userInput);
-        		} else if ((userInput.indexOf("put") == 0) && (userInput.length() == 7)){
+        		} else if ((userInput.indexOf("put") == 0)){
         			sendRequest(userInput);
         		} else if (userInput.equals("dump")){
         			sendRequest(userInput);
@@ -126,7 +141,6 @@ public class Client {
         		} else {
         			System.out.println("Wrong instruction.\n");
         		}
-        		//out.println(userInput);
         	}
     	}
     	socket.close();
@@ -134,9 +148,7 @@ public class Client {
     
     private void sendRequest(String req){
     	
-//    	while(!isFinished){
-//    	};
-    	
+    	latestReq = req;
     	String [] tokens = req.split(" "); 	
     	String realRequest;
     	if (tokens[0].equals("get")){
@@ -149,38 +161,36 @@ public class Client {
     	
     	try{
     		socketOutput.println(realRequest);
+    		synchronized(listener){
+                try{
+                    listener.wait();
+                }catch(InterruptedException e){
+                    e.printStackTrace();
+                }
+            }
+    		
     	} catch (Exception e) {
-    		// this is to handle connection lost
-    		
+    
+    		// this is to handle connection lost		
     		int newServerId = (serverId + 1) % 9;
+    			
+    		boolean isSucceed; 
+    		do {
+    			isSucceed = makeConnection(newServerId);
+   				if (isSucceed){
+   					this.serverId = newServerId;
+   				}
+   				newServerId = (newServerId + 1) % 9;    			
+   			} while (!isSucceed);
     		
-    		try {
-    			
-    			socket = new Socket(ipMap.get(newServerId), portMap.get(newServerId));
-    			socketInput = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-    			socketOutput = new PrintWriter(socket.getOutputStream(), true);
-    			serverId = newServerId;
-    			isFinished = false;
-    			
-    		} catch (IOException IOe) {
-    			
-    			boolean isSucceed; 
-    			do {
-    				newServerId = (newServerId + 1) % 9;
-    				isSucceed = makeConnection(newServerId);
-    			} while (!isSucceed);
-    			
-    			// update info
-    			serverId = newServerId;
-    			socketOutput.println("writeNum" + writeNum);
-    			socketOutput.println("readNum" + readNum);
-    			isFinished = false;
-    		}
+    		// update info
+    		serverId = newServerId;
+   			socketOutput.println("writeNum" + writeNum);
+   			socketOutput.println("readNum" + readNum);
+   		
+   			sendRequest(req);
     		
-    	}
-    	
-    	//  reading (you'll get -1 as return value) or writing (an IOException (broken pipe) will be thrown) 
-    	//try catch if connection is lost
+    	}   	
     }
     
 
@@ -192,13 +202,64 @@ public class Client {
     
 
 	public static void main(String[] args) throws NumberFormatException, IOException, InterruptedException {
-    	if (args.length != 2) {
-			System.out.println("Usage: java program serverAddr serverPort");
+    	if (args.length != 1) {
+			System.out.println("Please put the id of one replicaserver");
         	System.exit(0);
 		}
     	
-    	Client c = new Client(Integer.parseInt(args[1]));   // take the id of the server as argument
+    	Client c = new Client(Integer.parseInt(args[0]));   // take the id of the server as argument
     	c.run();
     	
     }
+	
+	private class listenerThread extends Thread {
+		
+		public listenerThread(){}
+		
+		public void run(){
+			
+		     try{
+		    	 String receiveMessage;
+		         while ((receiveMessage = socketInput.readLine()) != null) { 
+		        	 
+		            synchronized(this){ 
+		                notify();
+		            }
+		            System.out.println(receiveMessage); 
+		         }
+		         
+		      // handle connection lost
+		         synchronized(this){ 
+		        	 notify();
+		         }
+		         
+		         boolean isSucceed; 
+		    	do {
+		    		isSucceed = makeConnection(serverId);
+		   			serverId = (serverId + 1) % 9;
+		   		} while (!isSucceed);
+		   		
+		   		sendRequest(latestReq);
+		         
+		      }catch(Exception e){
+		    	// handle connection lost
+		    	synchronized(this){ 
+		            notify();
+		        }
+		         
+		        boolean isSucceed; 
+		    	do {
+		    		isSucceed = makeConnection(serverId);
+		   			serverId = (serverId + 1) % 9;
+		   		} while (!isSucceed);
+		   		
+		   		sendRequest(latestReq);
+		      }	
+		
+		}
+		
+	}
+
 }
+
+
