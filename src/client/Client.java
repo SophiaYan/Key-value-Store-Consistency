@@ -80,6 +80,8 @@ public class Client {
     		socketInput = new BufferedReader(new InputStreamReader(socket.getInputStream()));
     		socketOutput = new PrintWriter(socket.getOutputStream(), true);
     		
+    		socketOutput.println("client"); // hands shaking with server
+    		
     		try {
     			listener = new listenerThread();
     			listener.start();
@@ -221,6 +223,11 @@ public class Client {
 		     try{
 		    	 String receiveMessage;
 		         while ((receiveMessage = socketInput.readLine()) != null) { 
+		        	 
+		        	 if (receiveMessage.indexOf("serverid") == 0) {
+		        		 System.out.println("Connecting to server: " + receiveMessage.split(" ")[1]); // greeting from server
+		        		 continue;
+		        	 }
 		        	 
 		            synchronized(this){ 
 		                notify();

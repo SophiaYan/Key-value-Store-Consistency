@@ -12,7 +12,7 @@ import java.net.Socket;
 import java.io.FileReader;
 import java.util.*;
 
-public class ReplicaServer {
+public class ReplicaServer2 {
 	
 	private ServerSocket listener;
 	private String config;
@@ -44,7 +44,7 @@ public class ReplicaServer {
 	}
 	
 	// Ctor
-	public ReplicaServer(int port, String config) throws IOException {
+	public ReplicaServer2(int port, String config) throws IOException {
 		numClient = 0;
 		listener = new ServerSocket(port);
 		this.config = config;
@@ -68,7 +68,7 @@ public class ReplicaServer {
 					
 //					pw.println("id " + processId);// Servers hands shaking
 					
-					new GeneralHandler(socket).start(); // start a client handler
+					new ClientHandler(socket).start(); // start a client handler
 					
 //					serverSocket.put(i + 1, socket);
 //					serverPWMap.put(i + 1, pw);
@@ -154,7 +154,7 @@ public class ReplicaServer {
     	
     	try {
             while (true) {
-                new GeneralHandler(listener.accept()).start();
+                new ClientHandler(listener.accept()).start();
             }
         } finally {
             listener.close(); 
@@ -174,19 +174,20 @@ public class ReplicaServer {
         	System.exit(0);
 		}	
     	
-    	ReplicaServer rs = new ReplicaServer(Integer.parseInt(args[0]), "config");
+    	ReplicaServer2 rs = new ReplicaServer2(Integer.parseInt(args[0]), "config");
     	rs.run();
     }
     
-    public class GeneralHandler extends Thread {
+    public class ClientHandler extends Thread {
     	int serverId;
     	int clientId;
     	BufferedReader socketInput;
     	private PrintWriter socketOutput;
     	private Socket socket;
+    	boolean isClient;
 
     	// Constructor
-    	public GeneralHandler(Socket socket) {
+    	public ClientHandler(Socket socket) {
     		this.socket = socket;
     	}
 
@@ -203,124 +204,47 @@ public class ReplicaServer {
                     if (rawInput == null) {
                         return;
                     }
-                    if (rawInput.indexOf("serverid") == 0) { // Is a server
+                    if (rawInput.indexOf("serverid") == 0) {
                     	serverId = Integer.parseInt(rawInput.split(" ")[1]);
                     	if (!serverSocket.containsKey(serverId)){
                     		serverSocket.put(serverId, socket);
                         	serverPWMap.put(serverId, socketOutput);
                         	serverBRMap.put(serverId, socketInput);
                     	}
+                    	isClient = false;
                     	/////testing//////
                     	System.out.println("server: " + serverId);
                     	//////////////////
-                    	new ServerHandler(serverId).start();
                     	break;
                     }
-                    if (rawInput.indexOf("client") == 0) { // Is a client
+                    if (rawInput.indexOf("client") == 0) {
                     	clientId = numClient++;
                     	/////testing//////
                     	System.out.println("client: " + clientId);
                     	//////////////////
-                    	new ClientHandler(clientId, socket, socketInput, socketOutput).start();
-                    	break;
                     }
             	}
             	
             	
             	
-//            	while (true) {
-//            		String rawInput = socketInput.readLine();
-//            		if (rawInput == null) {
-//                        return;
-//                    }
-//            		// something need to be done
-//            	}
+            	while (true) {
+            		String rawInput = socketInput.readLine();
+            		if (rawInput == null) {
+                        return;
+                    }
+            		// something need to be done
+            	}
                  
     		} catch (IOException e) {
                 System.out.println(e);
+            } finally {
+            	try {
+                    socket.close();
+                } catch (IOException e) {
+                }
             } 		
     	}
     }
-    
-    public class ClientHandler extends Thread {
-    	int clientId;
-    	private BufferedReader socketInput;
-    	private PrintWriter socketOutput;
-    	private Socket socket;
-    	
-    	public ClientHandler(int clientId, Socket socket, BufferedReader socketInput, PrintWriter socketOutput) {
-    		this.clientId = clientId;
-    		this.socket = socket;
-    		this.socketInput = socketInput;
-    		this.socketOutput = socketOutput;
-    	}
-    	
-    	public void run() {
-    		
-    		try {
-    			
-    			while (true) {
-            		String rawInput;
-    				try {
-    					rawInput = socketInput.readLine();
-    					if (rawInput == null) {
-                            return;
-                        }
-    					// msg processing needs to be done here
-    					
-    				} catch (IOException e) {
-    					e.printStackTrace();
-    				}	
-            	}
-    			
-    		} finally {
-    			try {
-					socket.close();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-    		}
-
-    	}
-    }
-    
-    public class ServerHandler extends Thread {
-    	int serverId;
-    	private BufferedReader socketInput;
-    	private PrintWriter socketOutput;
-    	private Socket socket;
-
-    	public ServerHandler(int serverId) {
-    		this.serverId = serverId;
-    		this.socket = serverSocket.get(serverId);
-    		this.socketInput = serverBRMap.get(serverId);
-    		this.socketOutput = serverPWMap.get(serverId);
-    	}
-    	
-    	public void run() {
-    		try {
-    			
-            	while (true) {
-	        		String rawInput = socketInput.readLine();
-	        		if (rawInput == null) {
-	                    return;
-	                }
-	        		
-	        		// msg processing needs to be done here
-            	}
-            	
-    		} catch (IOException e) {
-				e.printStackTrace();
-			} finally {
-    			try {
-					socket.close();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-    		}
-    	}
-    }
-    
   
 }
 
