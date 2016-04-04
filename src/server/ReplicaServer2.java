@@ -11,6 +11,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.io.FileReader;
 import java.util.*;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 
 public class ReplicaServer2 {
 	
@@ -27,6 +29,7 @@ public class ReplicaServer2 {
 //	  private HashMap<Integer, Socket> clientSocket;
 //    private HashMap<Integer, String> clientIPMap;
 //    private HashMap<Integer, Integer> clientPortMap; 
+	private HashMap<Integer, BlockingQueue<String>> clientBQMap;
 	private int processPort;
 	private String processIp;
 	private int processId;
@@ -54,6 +57,7 @@ public class ReplicaServer2 {
 		serverSocket = new HashMap<Integer, Socket>();
 		serverBRMap = new HashMap<Integer, BufferedReader>();
 		serverPWMap = new HashMap<Integer, PrintWriter>();
+		clientBQMap = new HashMap<Integer, BlockingQueue<String>>();
 		//connect with all the other servers
 		readConfig(config);
 		
@@ -68,7 +72,7 @@ public class ReplicaServer2 {
 					
 //					pw.println("id " + processId);// Servers hands shaking
 					
-					new ClientHandler(socket).start(); // start a client handler
+					new GeneralHandler(socket).start(); // start a client handler
 					
 //					serverSocket.put(i + 1, socket);
 //					serverPWMap.put(i + 1, pw);
@@ -154,7 +158,7 @@ public class ReplicaServer2 {
     	
     	try {
             while (true) {
-                new ClientHandler(listener.accept()).start();
+                new GeneralHandler(listener.accept()).start();
             }
         } finally {
             listener.close(); 
@@ -178,16 +182,15 @@ public class ReplicaServer2 {
     	rs.run();
     }
     
-    public class ClientHandler extends Thread {
+    public class GeneralHandler extends Thread {
     	int serverId;
     	int clientId;
     	BufferedReader socketInput;
     	private PrintWriter socketOutput;
     	private Socket socket;
-    	boolean isClient;
 
     	// Constructor
-    	public ClientHandler(Socket socket) {
+    	public GeneralHandler(Socket socket) {
     		this.socket = socket;
     	}
 
@@ -204,47 +207,206 @@ public class ReplicaServer2 {
                     if (rawInput == null) {
                         return;
                     }
-                    if (rawInput.indexOf("serverid") == 0) {
+                    if (rawInput.indexOf("serverid") == 0) { // Is a server
                     	serverId = Integer.parseInt(rawInput.split(" ")[1]);
                     	if (!serverSocket.containsKey(serverId)){
                     		serverSocket.put(serverId, socket);
                         	serverPWMap.put(serverId, socketOutput);
                         	serverBRMap.put(serverId, socketInput);
                     	}
-                    	isClient = false;
                     	/////testing//////
                     	System.out.println("server: " + serverId);
                     	//////////////////
+                    	new ServerHandler(serverId).start();
                     	break;
                     }
-                    if (rawInput.indexOf("client") == 0) {
+                    if (rawInput.indexOf("client") == 0) { // Is a client
                     	clientId = numClient++;
                     	/////testing//////
                     	System.out.println("client: " + clientId);
                     	//////////////////
+                    	BlockingQueue<String> bq = new ArrayBlockingQueue<String>(256);
+                    	clientBQMap.put(clientId, bq);
+                    	new ClientHandler(clientId, socket, socketInput, socketOutput, bq).start();
+                    	break;
                     }
             	}
             	
             	
             	
-            	while (true) {
-            		String rawInput = socketInput.readLine();
-            		if (rawInput == null) {
-                        return;
-                    }
-            		// something need to be done
-            	}
+//            	while (true) {
+//            		String rawInput = socketInput.readLine();
+//            		if (rawInput == null) {
+//                        return;
+//                    }
+//            		// something need to be done
+//            	}
                  
     		} catch (IOException e) {
                 System.out.println(e);
-            } finally {
-            	try {
-                    socket.close();
-                } catch (IOException e) {
-                }
             } 		
     	}
     }
+    
+    public class ClientHandler extends Thread {
+    	int W;
+    	int R;
+    	int clientId;
+    	private BufferedReader socketInput;
+    	private PrintWriter socketOutput;
+    	private Socket socket;
+    	private BlockingQueue<String> bq;
+    	private Queue<String> dq;
+    	
+    	public ClientHandler(int clientId, Socket socket, BufferedReader socketInput, PrintWriter socketOutput, BlockingQueue<String> bq) {
+    		this.clientId = clientId;
+    		this.socket = socket;
+    		this.socketInput = socketInput;
+    		this.socketOutput = socketOutput;
+    		this.bq = bq;
+    		this.dq = new LinkedList<String>();
+    	}
+    	
+    	public void run() {
+    		
+    		try {
+
+    			
+    			while (true) {
+    				try {
+    					String rawInput = socketInput.readLine();
+    					if (rawInput == null) {
+                            return;
+                        }
+    					else if (rawInput.indexOf("writeNum") == 0) {
+    						W = Integer.parseInt(rawInput.split(" ")[1]);
+    					}
+    					else if (rawInput.indexOf("readNum") == 0) {
+    						R = Integer.parseInt(rawInput.split(" ")[1]);
+    					}
+    					else if (rawInput.indexOf("p") == 0) {
+    						char variable = rawInput.charAt(1);
+    						int value = Integer.parseInt(rawInput.substring(2));
+    						data[variable - 'a'] = value; // local write
+    						bq.put("A");
+    						multicast(clientId + " " + rawInput); // e.g. 1 px3 : client 1 writes 3 to x
+    						while(dq.size() < W) {
+    							dq.add(bq.take());
+    						}
+    						bq.clear();
+    						socketOutput.println("A");
+    						dq.clear();
+    					}
+    					else if (rawInput.indexOf("g") == 0) {
+    						char variable = rawInput.charAt(1);
+    						bq.put(new StringBuilder(data[variable - 'a']).toString()); // local read
+    						multicast(clientId + " " + rawInput); // e.g. 1 gx : client 1 reads x
+    						while(dq.size() < R) {
+    							dq.add(bq.take());
+    						}
+    						bq.clear();
+    						System.out.println(dq.peek());
+    						socketOutput.println(dq.peek());
+    						dq.clear();
+    					}
+    					else if (rawInput.indexOf("d") == 0) {
+    					}
+    					else continue; // ignore invalid input
+    					
+    				} catch (IOException e) {
+    					e.printStackTrace();
+    				} catch (InterruptedException e) {
+						e.printStackTrace();
+					}	
+            	}
+    			
+    		} finally {
+    			try {
+					socket.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+    		}
+
+    	}
+
+		private void multicast(String msg) {
+			for (PrintWriter pw : serverPWMap.values()) {
+				pw.println(msg);
+			}
+		}
+    }
+    
+    public class ServerHandler extends Thread {
+    	int serverId;
+    	private BufferedReader socketInput;
+    	private PrintWriter socketOutput;
+    	private Socket socket;
+
+    	public ServerHandler(int serverId) {
+    		this.serverId = serverId;
+    		this.socket = serverSocket.get(serverId);
+    		this.socketInput = serverBRMap.get(serverId);
+    		this.socketOutput = serverPWMap.get(serverId);
+    	}
+    	
+    	public void run() {
+    		try {
+    			
+            	while (true) {
+	        		String rawInput = socketInput.readLine();
+	        		if (rawInput == null) {
+	                    return;
+	                }
+	        		
+	        		String[] tokens = rawInput.split(" ");
+	        		/////testing///////
+	        		System.out.println(rawInput);
+	        		///////////////////
+	        		int clientId = Integer.parseInt(tokens[0]);
+	        		if (tokens[1].indexOf("p") == 0) {
+	        			String request = tokens[1];
+	        			data[request.charAt(1) - 'a'] = Integer.parseInt(request.substring(2));
+	        			System.out.println(data[request.charAt(1) - 'a']);
+	        			socketOutput.println(clientId + " " + "A"); // e.g. 1 A : finished writing on request from client 1
+	        		}
+	        		else if (tokens[1].indexOf("g") == 0) {
+	        			String request = tokens[1];
+	        			int readVal = data[request.charAt(1) - 'a'];
+	        			System.out.println(request.charAt(1));
+	        			System.out.println(request.charAt(1) - 'a');
+	        			System.out.println(data[request.charAt(1) - 'a']);
+	        			System.out.println(clientId + " " + readVal);
+	        			socketOutput.println(clientId + " " + readVal); // e.g. 1 3 : reply with value 3 on request from client 1
+	        		}
+	        		else if (tokens[1].indexOf("A") == 0) {
+	        			String reply = tokens[1];
+	        			clientBQMap.get(clientId).put("A"); // e.g. 1 A : a server just finishing writing on client 1's request, let's tell client 1
+	        		} 
+	        		else if (tokens[1].charAt(0) - '0' >= 0 && tokens[1].charAt(0) - '0' <= 9) {
+	        			String reply = tokens[1];
+	        			clientBQMap.get(clientId).put(tokens[1]); // e.g. 1 A : a server just finishing reading on client 1's request, let's tell client 1 what is read
+	        		}
+	        		else continue; // ignore invalid msg
+	        		
+	        		// msg processing needs to be done here
+            	}
+            	
+    		} catch (IOException e) {
+				e.printStackTrace();
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} finally {
+    			try {
+					socket.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+    		}
+    	}
+    }
+    
   
 }
 

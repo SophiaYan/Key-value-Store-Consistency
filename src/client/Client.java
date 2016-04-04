@@ -116,7 +116,7 @@ public class Client {
         	}
         	
     		System.out.println(" Input W number and R number with space in between.\n");
-;        	while ((userInput = stdIn.readLine()) != null){	
+        	while ((userInput = stdIn.readLine()) != null){	
         		String [] tokens = userInput.split(" ");
         		int proposeWrite = Integer.parseInt(tokens[0]);
         		int proposeRead = Integer.parseInt(tokens[1]);
@@ -124,8 +124,8 @@ public class Client {
         		if ((proposeWrite > 0) && (proposeWrite < 10) && (proposeRead > 0) && (proposeRead < 10)){
         			writeNum = proposeWrite;
         			readNum = proposeRead;
-        			socketOutput.println("writeNum" + writeNum);
-        			socketOutput.println("readNum" + readNum);
+        			socketOutput.println("writeNum " + writeNum);
+        			socketOutput.println("readNum " + readNum);
         			break;
         		}
         	}
@@ -226,6 +226,7 @@ public class Client {
 		        	 
 		        	 if (receiveMessage.indexOf("serverid") == 0) {
 		        		 System.out.println("Connecting to server: " + receiveMessage.split(" ")[1]); // greeting from server
+		        		 
 		        		 continue;
 		        	 }
 		        	 
