@@ -10,11 +10,11 @@ import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
 
 public class Client {
+
 	
-	public BufferedReader socketInput;
+	private BufferedReader socketInput;
 	private PrintWriter socketOutput;
 	private Socket socket;
-	private int consistency;  // indicate the consistency model, 1 for eventual, 2 for linearizability
 	private int writeNum;
 	private int readNum;
 	private int serverId;
@@ -24,6 +24,7 @@ public class Client {
     private HashMap<Integer, String> ipMap;
     private HashMap<Integer, Integer> portMap; 
     
+
     /*
      *  client constructor
      */
@@ -42,7 +43,6 @@ public class Client {
 			serverId = (serverId + 1) % 9;
 		} while (!isSucceed);
     		
-		consistency = 0;
 		writeNum = 0;
 		readNum = 0;
 		
@@ -104,31 +104,6 @@ public class Client {
     	{
     		
     		String userInput = null;
-    		System.out.println("Choose consistency model. \n"
-					+  "Type 1 for eventual consistency model. Type 2 for linearizability.\n");
-        	
-    		while (((consistency == 0)  && (userInput = stdIn.readLine()) != null) ){
-        		int proposedCons = Integer.parseInt(userInput.substring(0,1));
-        		if ((proposedCons == 1) || (proposedCons == 2)){
-        			consistency = proposedCons;
-        			socketOutput.println("consistency" + consistency);
-        		}
-        	}
-        	
-    		System.out.println(" Input W number and R number with space in between.\n");
-        	while ((userInput = stdIn.readLine()) != null){	
-        		String [] tokens = userInput.split(" ");
-        		int proposeWrite = Integer.parseInt(tokens[0]);
-        		int proposeRead = Integer.parseInt(tokens[1]);
-        				
-        		if ((proposeWrite > 0) && (proposeWrite < 10) && (proposeRead > 0) && (proposeRead < 10)){
-        			writeNum = proposeWrite;
-        			readNum = proposeRead;
-        			socketOutput.println("writeNum " + writeNum);
-        			socketOutput.println("readNum " + readNum);
-        			break;
-        		}
-        	}
         	
 			System.out.println("Please input request. \n");
         	while ((userInput = stdIn.readLine()) != null) {
@@ -225,8 +200,7 @@ public class Client {
 		         while ((receiveMessage = socketInput.readLine()) != null) { 
 		        	 
 		        	 if (receiveMessage.indexOf("serverid") == 0) {
-		        		 System.out.println("Connecting to server: " + receiveMessage.split(" ")[1]); // greeting from server
-		        		 
+		        		 System.out.println("Connected to server: " + receiveMessage.split(" ")[1]); // greeting from server
 		        		 continue;
 		        	 }
 		        	 
